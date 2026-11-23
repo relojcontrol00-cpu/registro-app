@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espacio OX - Visualizador de Medidores</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; }
+    .tab-active { border-bottom: 3px solid #2563eb; color: #1d4ed8; font-weight: 600; }
+    .tab-inactive { border-bottom: 3px solid transparent; color: #64748b; }
+    .tab-inactive:hover { color: #1e293b; border-color: #cbd5e1; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+          OX
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-slate-900 leading-tight">Espacio OX</h1>
+          <p class="text-xs text-slate-500 font-medium">Control y Monitoreo de Medidores Diarios</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center space-x-3">
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+          SQLite Conectado
+        </span>
+        <button onclick="cargarKPIs(); cargarGraficos(); cargarConsumos();" class="p-2 text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition" title="Refrescar datos">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navegación por pestañas -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-8 text-sm overflow-x-auto">
+      <button onclick="cambiarTab('tab-graficos')" id="btn-tab-graficos" class="py-3 px-1 tab-active flex items-center gap-2 whitespace-nowrap">
+        <i data-lucide="line-chart" class="w-4 h-4"></i> Gráficos y Tendencias
+      </button>
+      <button onclick="cambiarTab('tab-consumos')" id="btn-tab-consumos" class="py-3 px-1 tab-inactive flex items-center gap-2 whitespace-nowrap">
+        <i data-lucide="table-2" class="w-4 h-4"></i> Consumos Diarios
+      </button>
+      <button onclick="cambiarTab('tab-tablas')" id="btn-tab-tablas" class="py-3 px-1 tab-inactive flex items-center gap-2 whitespace-nowrap">
+        <i data-lucide="database" class="w-4 h-4"></i> Explorador de Tablas
+      </button>
+      <button onclick="cambiarTab('tab-sql')" id="btn-tab-sql" class="py-3 px-1 tab-inactive flex items-center gap-2 whitespace-nowrap">
+        <i data-lucide="terminal" class="w-4 h-4"></i> Consola SQL
+      </button>
+    </div>
+  </header>
+
+  <!-- Contenido Principal -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+    <!-- KPI Cards -->
+    <div id="kpi-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+      <!-- Días Registrados -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Historial</span>
+          <i data-lucide="calendar" class="w-4 h-4 text-blue-500"></i>
+        </div>
+        <div class="mt-2">
+          <div id="kpi-dias" class="text-2xl font-bold text-slate-900">--</div>
+          <div id="kpi-rango" class="text-[11px] text-slate-500 truncate mt-0.5">Cargando...</div>
+        </div>
+      </div>
+
+      <!-- Agua MG -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Agua M.G.</span>
+          <i data-lucide="droplet" class="w-4 h-4 text-cyan-500"></i>
+        </div>
+        <div class="mt-2">
+          <div id="kpi-agua-mg-val" class="text-2xl font-bold text-slate-900">-- <span class="text-xs font-normal text-slate-500">m³</span></div>
+          <div id="kpi-agua-mg-diff" class="text-[11px] text-cyan-600 font-medium mt-0.5">-- m³/día</div>
+        </div>
+      </div>
+
+      <!-- Agua Bow -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Agua Bow</span>
+          <i data-lucide="waves" class="w-4 h-4 text-blue-500"></i>
+        </div>
+        <div class="mt-2">
+          <div id="kpi-agua-bow-val" class="text-2xl font-bold text-slate-900">-- <span class="text-xs font-normal text-slate-500">m³</span></div>
+          <div id="kpi-agua-bow-diff" class="text-[11px] text-blue-600 font-medium mt-0.5">-- m³/día</div>
+        </div>
+      </div>
+
+      <!-- Luz Hotel -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Luz Hotel</span>
+          <i data-lucide="zap" class="w-4 h-4 text-amber-500"></i>
+        </div>
+        <div class="mt-2">
+          <div id="kpi-luz-val" class="text-2xl font-bold text-slate-900">-- <span class="text-xs font-normal text-slate-500">kWh</span></div>
+          <div id="kpi-luz-diff" class="text-[11px] text-amber-600 font-medium mt-0.5">-- kWh/día</div>
+        </div>
+      </div>
+
+      <!-- Diésel -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Nivel Diésel</span>
+          <i data-lucide="fuel" class="w-4 h-4 text-rose-500"></i>
+        </div>
+        <div class="mt-2">
+          <div id="kpi-diesel-val" class="text-2xl font-bold text-slate-900">-- <span class="text-xs font-normal text-slate-500">L</span></div>
+          <div id="kpi-diesel-diff" class="text-[11px] text-rose-600 font-medium mt-0.5">--</div>
+        </div>
+      </div>
+
+      <!-- Gas -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Estado Gas</span>
+          <i data-lucide="flame" class="w-4 h-4 text-orange-500"></i>
+        </div>
+        <div class="mt-2">
+          <div id="kpi-gas-val" class="text-2xl font-bold text-slate-900">--</div>
+          <div id="kpi-gas-sub" class="text-[11px] text-slate-500 mt-0.5">Último reporte</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PESTAÑA 1: GRÁFICOS Y TENDENCIAS -->
+    <section id="tab-graficos" class="space-y-6">
+      <!-- Selector de período -->
+      <div class="flex items-center justify-between flex-wrap gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+        <div class="flex items-center gap-2">
+          <i data-lucide="filter" class="w-4 h-4 text-slate-400"></i>
+          <span class="text-xs font-medium text-slate-600">Período de análisis:</span>
+        </div>
+        <div class="flex space-x-1.5 text-xs font-medium">
+          <button onclick="setPeriodoGrafico('30d')" id="btn-periodo-30d" class="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">30 Días</button>
+          <button onclick="setPeriodoGrafico('90d')" id="btn-periodo-90d" class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">90 Días</button>
+          <button onclick="setPeriodoGrafico('1y')" id="btn-periodo-1y" class="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">1 Año</button>
+          <button onclick="setPeriodoGrafico('all')" id="btn-periodo-all" class="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">Histórico Completo</button>
+        </div>
+      </div>
+
+      <!-- Grillas de Gráficos -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Gráfico 1: Consumo de Agua Diario -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Consumo Diario de Agua</h3>
+              <p class="text-xs text-slate-500">Medidor General vs Bow vs Hotel (m³/día)</p>
+            </div>
+            <span class="p-2 bg-cyan-50 text-cyan-600 rounded-lg"><i data-lucide="droplets" class="w-4 h-4"></i></span>
+          </div>
+          <div class="h-64">
+            <canvas id="chart-agua"></canvas>
+          </div>
+        </div>
+
+        <!-- Gráfico 2: Consumo de Luz Diario -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Consumo Eléctrico Diario</h3>
+              <p class="text-xs text-slate-500">Remarcador Luz Hotel (kWh/día)</p>
+            </div>
+            <span class="p-2 bg-amber-50 text-amber-600 rounded-lg"><i data-lucide="zap" class="w-4 h-4"></i></span>
+          </div>
+          <div class="h-64">
+            <canvas id="chart-luz"></canvas>
+          </div>
+        </div>
+
+        <!-- Gráfico 3: Nivel de Petróleo / Diésel -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Nivel de Estanque de Petróleo</h3>
+              <p class="text-xs text-slate-500">Capacidad restante en litros (L)</p>
+            </div>
+            <span class="p-2 bg-rose-50 text-rose-600 rounded-lg"><i data-lucide="fuel" class="w-4 h-4"></i></span>
+          </div>
+          <div class="h-64">
+            <canvas id="chart-diesel"></canvas>
+          </div>
+        </div>
+
+        <!-- Gráfico 4: Lectura acumulada Agua MG -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Lectura Acumulada Agua General</h3>
+              <p class="text-xs text-slate-500">Evolución continua del contador (m³)</p>
+            </div>
+            <span class="p-2 bg-blue-50 text-blue-600 rounded-lg"><i data-lucide="trending-up" class="w-4 h-4"></i></span>
+          </div>
+          <div class="h-64">
+            <canvas id="chart-acumulado"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PESTAÑA 2: VISTA DE CONSUMOS DIARIOS -->
+    <section id="tab-consumos" class="hidden space-y-4">
+      <!-- Filtros de la tabla -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-sm">
+        <div class="flex flex-wrap items-center gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Desde:</label>
+            <input type="date" id="filtro-desde" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Hasta:</label>
+            <input type="date" id="filtro-hasta" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Buscar en observaciones/gas:</label>
+            <input type="text" id="filtro-buscar" placeholder="ej. recarga, corte..." class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-700 w-48 focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div class="self-end">
+            <button onclick="aplicarFiltrosConsumos()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition shadow-sm">
+              Filtrar
+            </button>
+            <button onclick="limpiarFiltrosConsumos()" class="ml-1 text-slate-500 hover:text-slate-800 text-xs px-2.5 py-2 rounded-lg transition">
+              Limpiar
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 self-end">
+          <button onclick="exportarCSV()" class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 border border-slate-200 px-3 py-2 rounded-lg transition">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i> Exportar a CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabla de consumos -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-semibold">
+              <tr>
+                <th class="py-3 px-4">Fecha</th>
+                <th class="py-3 px-3 text-right">Agua MG (m³)</th>
+                <th class="py-3 px-3 text-right bg-cyan-50/50 text-cyan-800">Cons. MG</th>
+                <th class="py-3 px-3 text-right">Agua Bow</th>
+                <th class="py-3 px-3 text-right bg-blue-50/50 text-blue-800">Cons. Bow</th>
+                <th class="py-3 px-3 text-right">Luz Hotel</th>
+                <th class="py-3 px-3 text-right bg-amber-50/50 text-amber-800">Cons. Luz</th>
+                <th class="py-3 px-3 text-right">TK Diésel</th>
+                <th class="py-3 px-3 text-center">Gas</th>
+                <th class="py-3 px-4">Observaciones</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-consumos-body" class="divide-y divide-slate-100 font-mono">
+              <tr>
+                <td colspan="10" class="py-8 text-center text-slate-400 font-sans">Cargando datos...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Paginación -->
+        <div class="bg-slate-50 px-4 py-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 font-sans">
+          <div id="paginacion-info">Mostrando 0 de 0 registros</div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="cambiarPaginaConsumos(-1)" id="btn-pag-prev" class="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40">Anterior</button>
+            <span id="pag-actual" class="px-2 font-medium text-slate-700">1</span>
+            <button onclick="cambiarPaginaConsumos(1)" id="btn-pag-next" class="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PESTAÑA 3: EXPLORADOR DE TABLAS CRUDAS -->
+    <section id="tab-tablas" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-3 text-sm">
+          <label class="font-medium text-slate-700">Seleccionar Tabla:</label>
+          <select id="select-tabla" onchange="cargarTablaSeleccionada()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-700 font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500">
+            <!-- Rellenado dinámicamente -->
+          </select>
+        </div>
+        <div id="info-tabla-filas" class="text-xs text-slate-500 font-mono">-- filas totales</div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto max-h-[550px]">
+          <table class="w-full text-left text-xs text-slate-600 font-mono">
+            <thead id="tabla-cruda-head" class="bg-slate-50 border-b border-slate-200 text-slate-700 sticky top-0 uppercase font-sans">
+              <!-- Columnas dinámicas -->
+            </thead>
+            <tbody id="tabla-cruda-body" class="divide-y divide-slate-100">
+              <tr><td class="p-6 text-center text-slate-400 font-sans">Selecciona una tabla</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500">
+          <div id="paginacion-cruda-info">0 registros</div>
+          <div class="flex gap-1.5">
+            <button onclick="cambiarPaginaCruda(-1)" id="btn-cruda-prev" class="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40">Anterior</button>
+            <button onclick="cambiarPaginaCruda(1)" id="btn-cruda-next" class="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PESTAÑA 4: CONSOLA SQL -->
+    <section id="tab-sql" class="hidden space-y-4">
+      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="terminal" class="w-4 h-4 text-blue-600"></i> Ejecutor de Consultas SQL (Solo Lectura)
+          </h3>
+          <span class="text-xs text-slate-400">SELECT / WITH soportados</span>
+        </div>
+
+        <!-- Queries de ejemplo -->
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="text-slate-500 font-medium">Ejemplos rápidos:</span>
+          <button onclick="ponerQuery(1)" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition">Top 10 consumo Agua MG</button>
+          <button onclick="ponerQuery(2)" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition">Top 10 consumo Luz</button>
+          <button onclick="ponerQuery(3)" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition">Recargas de Petróleo</button>
+          <button onclick="ponerQuery(4)" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition">Consumo promedio por año</button>
+        </div>
+
+        <textarea id="sql-input" rows="4" class="w-full font-mono text-xs p-3 bg-slate-900 text-emerald-400 rounded-lg border border-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Escribe tu consulta SQL aquí... Ej: SELECT * FROM puntos_medicion"></textarea>
+
+        <div class="flex justify-between items-center">
+          <span id="sql-error" class="text-xs text-rose-600 font-medium"></span>
+          <button onclick="ejecutarSQL()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5">
+            <i data-lucide="play" class="w-3.5 h-3.5"></i> Ejecutar Consulta
+          </button>
+        </div>
+      </div>
+
+      <!-- Resultados SQL -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-3 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 flex justify-between">
+          <span>Resultados</span>
+          <span id="sql-count" class="font-mono text-slate-400">0 filas</span>
+        </div>
+        <div class="overflow-x-auto max-h-96">
+          <table class="w-full text-left text-xs text-slate-600 font-mono">
+            <thead id="sql-res-head" class="bg-slate-50 border-b border-slate-200 text-slate-700 sticky top-0 uppercase font-sans">
+              <tr><th class="p-3">Resultado</th></tr>
+            </thead>
+            <tbody id="sql-res-body" class="divide-y divide-slate-100">
+              <tr><td class="p-4 text-center text-slate-400 font-sans">Escribe una consulta y presiona Ejecutar.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-4 mt-8 text-center text-xs text-slate-400">
+    Espacio OX &copy; Registro Diario de Medidores • Base de Datos SQLite Conectada
+  </footer>
+
+  <script>
+    // Variables de Estado
+    let charts = {};
+    let periodoGraficosActual = '90d';
+    let consumosOffset = 0;
+    const consumosLimit = 50;
+    let consumosTotal = 0;
+
+    let crudaOffset = 0;
+    const crudaLimit = 50;
+    let crudaTotal = 0;
+
+    // Inicialización al cargar la página
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      cargarKPIs();
+      cargarGraficos();
+      cargarConsumos();
+      cargarListaTablas();
+    });
+
+    // Control de Pestañas
+    function cambiarTab(tabId) {
+      ['tab-graficos', 'tab-consumos', 'tab-tablas', 'tab-sql'].forEach(t => {
+        const el = document.getElementById(t);
+        const btn = document.getElementById('btn-' + t);
+        if (t === tabId) {
+          el.classList.remove('hidden');
+          btn.className = 'py-3 px-1 tab-active flex items-center gap-2 whitespace-nowrap';
+        } else {
+          el.classList.add('hidden');
+          btn.className = 'py-3 px-1 tab-inactive flex items-center gap-2 whitespace-nowrap';
+        }
+      });
+      lucide.createIcons();
+    }
+
+    // 1. CARGAR KPIS
+    async function cargarKPIs() {
+      try {
+        const res = await fetch('/api/kpis');
+        const d = await res.json();
+        
+        document.getElementById('kpi-dias').innerText = d.dias_total ? d.dias_total.toLocaleString() : '--';
+        document.getElementById('kpi-rango').innerText = `${d.min_fecha} al ${d.max_fecha}`;
+
+        const ult = d.ultimo_registro || {};
+        document.getElementById('kpi-agua-mg-val').innerHTML = `${ult.agua_mg ? ult.agua_mg.toLocaleString() : '--'} <span class="text-xs font-normal text-slate-500">m³</span>`;
+        document.getElementById('kpi-agua-mg-diff').innerText = `+${ult.consumo_agua_mg || 0} m³/día`;
+
+        document.getElementById('kpi-agua-bow-val').innerHTML = `${ult.agua_bow ? ult.agua_bow.toLocaleString() : '--'} <span class="text-xs font-normal text-slate-500">m³</span>`;
+        document.getElementById('kpi-agua-bow-diff').innerText = `+${ult.consumo_agua_bow || 0} m³/día`;
+
+        document.getElementById('kpi-luz-val').innerHTML = `${ult.luz_hotel ? ult.luz_hotel.toLocaleString() : '--'} <span class="text-xs font-normal text-slate-500">kWh</span>`;
+        document.getElementById('kpi-luz-diff').innerText = `+${ult.consumo_luz_hotel || 0} kWh/día`;
+
+        document.getElementById('kpi-diesel-val').innerHTML = `${ult.nivel_diesel ? ult.nivel_diesel.toLocaleString() : '--'} <span class="text-xs font-normal text-slate-500">L</span>`;
+        const deltaD = ult.delta_nivel_diesel;
+        document.getElementById('kpi-diesel-diff').innerText = deltaD ? `${deltaD > 0 ? '-' : '+'}${Math.abs(deltaD)} L/día` : 'Sin variación';
+
+        document.getElementById('kpi-gas-val').innerText = ult.gas_registro || '--';
+      } catch (e) {
+        console.error('Error cargando KPIs:', e);
+      }
+    }
+
+    // 2. CARGAR GRÁFICOS
+    function setPeriodoGrafico(p) {
+      periodoGraficosActual = p;
+      ['30d', '90d', '1y', 'all'].forEach(x => {
+        const b = document.getElementById('btn-periodo-' + x);
+        if (x === p) {
+          b.className = 'px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200';
+        } else {
+          b.className = 'px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50';
+        }
+      });
+      cargarGraficos();
+    }
+
+    async function cargarGraficos() {
+      try {
+        const res = await fetch(`/api/graficos?periodo=${periodoGraficosActual}`);
+        const json = await res.json();
+        const data = json.data;
+
+        const labels = data.map(r => r.fecha);
+        const consumoAguaMG = data.map(r => r.consumo_agua_mg);
+        const consumoAguaBow = data.map(r => r.consumo_agua_bow);
+        const consumoAguaHotel = data.map(r => r.consumo_agua_hotel);
+        const consumoLuz = data.map(r => r.consumo_luz_hotel);
+        const nivelDiesel = data.map(r => r.nivel_diesel);
+        const lecturaAguaMG = data.map(r => r.agua_mg);
+
+        // Destruir gráficos previos
+        ['agua', 'luz', 'diesel', 'acumulado'].forEach(k => {
+          if (charts[k]) charts[k].destroy();
+        });
+
+        // 1. Gráfico Agua
+        charts.agua = new Chart(document.getElementById('chart-agua'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Agua M.G.', data: consumoAguaMG, borderColor: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.1)', fill: true, tension: 0.2, pointRadius: 1 },
+              { label: 'Agua Bow', data: consumoAguaBow, borderColor: '#3b82f6', tension: 0.2, pointRadius: 1 },
+              { label: 'Agua Hotel', data: consumoAguaHotel, borderColor: '#6366f1', tension: 0.2, pointRadius: 1 }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } } }
+        });
+
+        // 2. Gráfico Luz
+        charts.luz = new Chart(document.getElementById('chart-luz'), {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{ label: 'Consumo kWh', data: consumoLuz, backgroundColor: '#f59e0b', borderRadius: 2 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+
+        // 3. Gráfico Diésel
+        charts.diesel = new Chart(document.getElementById('chart-diesel'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{ label: 'Nivel Litros (L)', data: nivelDiesel, borderColor: '#f43f5e', backgroundColor: 'rgba(244,63,94,0.08)', fill: true, tension: 0.1, pointRadius: 1 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+
+        // 4. Gráfico Acumulado
+        charts.acumulado = new Chart(document.getElementById('chart-acumulado'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{ label: 'Lectura Total m³', data: lecturaAguaMG, borderColor: '#2563eb', tension: 0.1, pointRadius: 0 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+
+      } catch (e) {
+        console.error('Error cargando gráficos:', e);
+      }
+    }
+
+    // 3. CARGAR TABLA DE CONSUMOS
+    async function cargarConsumos() {
+      const desde = document.getElementById('filtro-desde').value;
+      const hasta = document.getElementById('filtro-hasta').value;
+      const search = document.getElementById('filtro-buscar').value;
+
+      const url = `/api/consumos?desde=${desde}&hasta=${hasta}&search=${encodeURIComponent(search)}&limit=${consumosLimit}&offset=${consumosOffset}`;
+      
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        consumosTotal = data.total;
+
+        const tbody = document.getElementById('tabla-consumos-body');
+        if (!data.rows || data.rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-slate-400 font-sans">No se encontraron registros con los filtros seleccionados.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.rows.map(r => `
+          <tr class="hover:bg-slate-50 transition font-mono">
+            <td class="py-2.5 px-4 font-semibold text-slate-900 whitespace-nowrap">${r.fecha}</td>
+            <td class="py-2.5 px-3 text-right">${r.agua_mg !== null ? r.agua_mg.toLocaleString() : '-'}</td>
+            <td class="py-2.5 px-3 text-right font-semibold text-cyan-700 bg-cyan-50/30">${r.consumo_agua_mg !== null ? '+' + r.consumo_agua_mg : '-'}</td>
+            <td class="py-2.5 px-3 text-right">${r.agua_bow !== null ? r.agua_bow.toLocaleString() : '-'}</td>
+            <td class="py-2.5 px-3 text-right font-semibold text-blue-700 bg-blue-50/30">${r.consumo_agua_bow !== null ? '+' + r.consumo_agua_bow : '-'}</td>
+            <td class="py-2.5 px-3 text-right">${r.luz_hotel !== null ? r.luz_hotel.toLocaleString() : '-'}</td>
+            <td class="py-2.5 px-3 text-right font-semibold text-amber-700 bg-amber-50/30">${r.consumo_luz_hotel !== null ? '+' + r.consumo_luz_hotel : '-'}</td>
+            <td class="py-2.5 px-3 text-right font-medium text-slate-700">${r.nivel_diesel !== null ? r.nivel_diesel : '-'}</td>
+            <td class="py-2.5 px-3 text-center text-xs whitespace-nowrap">${r.gas_registro ? `<span class="px-2 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200 font-sans">${r.gas_registro}</span>` : '-'}</td>
+            <td class="py-2.5 px-4 font-sans text-xs text-slate-600 max-w-xs truncate" title="${r.observacion || ''}">${r.observacion || '-'}</td>
+          </tr>
+        `).join('');
+
+        // Paginación UI
+        const desdeNum = consumosOffset + 1;
+        const hastaNum = Math.min(consumosOffset + consumosLimit, consumosTotal);
+        document.getElementById('paginacion-info').innerText = `Mostrando ${desdeNum} a ${hastaNum} de ${consumosTotal} registros`;
+        document.getElementById('pag-actual').innerText = Math.floor(consumosOffset / consumosLimit) + 1;
+        document.getElementById('btn-pag-prev').disabled = consumosOffset === 0;
+        document.getElementById('btn-pag-next').disabled = consumosOffset + consumosLimit >= consumosTotal;
+
+      } catch (e) {
+        console.error('Error cargando consumos:', e);
+      }
+    }
+
+    function cambiarPaginaConsumos(delta) {
+      consumosOffset += delta * consumosLimit;
+      if (consumosOffset < 0) consumosOffset = 0;
+      cargarConsumos();
+    }
+
+    function aplicarFiltrosConsumos() {
+      consumosOffset = 0;
+      cargarConsumos();
+    }
+
+    function limpiarFiltrosConsumos() {
+      document.getElementById('filtro-desde').value = '';
+      document.getElementById('filtro-hasta').value = '';
+      document.getElementById('filtro-buscar').value = '';
+      consumosOffset = 0;
+      cargarConsumos();
+    }
+
+    function exportarCSV() {
+      const desde = document.getElementById('filtro-desde').value;
+      const hasta = document.getElementById('filtro-hasta').value;
+      const search = document.getElementById('filtro-buscar').value;
+      window.open(`/api/consumos?desde=${desde}&hasta=${hasta}&search=${encodeURIComponent(search)}&limit=10000&offset=0`, '_blank');
+    }
+
+    // 4. EXPLORADOR DE TABLAS CRUDAS
+    async function cargarListaTablas() {
+      try {
+        const res = await fetch('/api/tablas');
+        const d = await res.json();
+        const sel = document.getElementById('select-tabla');
+        sel.innerHTML = d.tablas.map(t => `<option value="${t.nombre}">${t.nombre} (${t.filas} filas)</option>`).join('');
+        cargarTablaSeleccionada();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function cargarTablaSeleccionada() {
+      const tabla = document.getElementById('select-tabla').value;
+      const res = await fetch(`/api/explorar?tabla=${tabla}&limit=${crudaLimit}&offset=${crudaOffset}`);
+      const d = await res.json();
+      crudaTotal = d.total;
+
+      document.getElementById('info-tabla-filas').innerText = `${d.total} filas totales`;
+
+      const thead = document.getElementById('tabla-cruda-head');
+      thead.innerHTML = '<tr>' + d.columnas.map(c => `<th class="py-2.5 px-3">${c}</th>`).join('') + '</tr>';
+
+      const tbody = document.getElementById('tabla-cruda-body');
+      tbody.innerHTML = d.rows.map(r => `
+        <tr class="hover:bg-slate-50">
+          ${d.columnas.map(c => `<td class="py-2 px-3 whitespace-nowrap">${r[c] !== null ? r[c] : '<span class="text-slate-300">NULL</span>'}</td>`).join('')}
+        </tr>
+      `).join('');
+
+      document.getElementById('paginacion-cruda-info').innerText = `Mostrando ${crudaOffset + 1} a ${Math.min(crudaOffset + crudaLimit, crudaTotal)} de ${crudaTotal}`;
+      document.getElementById('btn-cruda-prev').disabled = crudaOffset === 0;
+      document.getElementById('btn-cruda-next').disabled = crudaOffset + crudaLimit >= crudaTotal;
+    }
+
+    function cambiarPaginaCruda(delta) {
+      crudaOffset += delta * crudaLimit;
+      if (crudaOffset < 0) crudaOffset = 0;
+      cargarTablaSeleccionada();
+    }
+
+    // 5. CONSOLA SQL
+    function ponerQuery(num) {
+      const queries = {
+        1: "SELECT fecha, consumo_agua_mg, agua_mg, observacion FROM v_consumos_diarios WHERE consumo_agua_mg IS NOT NULL ORDER BY consumo_agua_mg DESC LIMIT 10",
+        2: "SELECT fecha, consumo_luz_hotel, luz_hotel, observacion FROM v_consumos_diarios WHERE consumo_luz_hotel IS NOT NULL ORDER BY consumo_luz_hotel DESC LIMIT 10",
+        3: "SELECT fecha, observacion FROM observaciones_diarias WHERE observacion LIKE '%petroleo%' OR observacion LIKE '%petrolio%' ORDER BY fecha DESC",
+        4: "SELECT substr(fecha, 1, 4) as anio, ROUND(AVG(consumo_agua_mg), 2) as prom_agua_mg, ROUND(AVG(consumo_luz_hotel), 2) as prom_luz FROM v_consumos_diarios GROUP BY anio ORDER BY anio DESC"
+      };
+      document.getElementById('sql-input').value = queries[num] || '';
+    }
+
+    async function ejecutarSQL() {
+      let sql = document.getElementById('sql-input').value.trim();
+      const errEl = document.getElementById('sql-error');
+      errEl.innerText = '';
+
+      if (!sql) return;
+
+      // Limpiar puntos y comas al final para evitar el error de SQLite
+      while (sql.endsWith(';')) {
+        sql = sql.slice(0, -1).trim();
+      }
+
+      try {
+        const res = await fetch('/api/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: sql })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          errEl.innerText = data.error;
+          return;
+        }
+
+        document.getElementById('sql-count').innerText = `${data.count} filas devueltas`;
+
+        const thead = document.getElementById('sql-res-head');
+        thead.innerHTML = '<tr>' + (data.columnas || []).map(c => `<th class="py-2.5 px-3">${c}</th>`).join('') + '</tr>';
+
+        const tbody = document.getElementById('sql-res-body');
+        if (!data.rows || data.rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="100%" class="p-4 text-center text-slate-400 font-sans">0 resultados.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.rows.map(r => `
+          <tr class="hover:bg-slate-50">
+            ${data.columnas.map(c => `<td class="py-1.5 px-3 whitespace-nowrap">${r[c] !== null ? r[c] : '<span class="text-slate-300">NULL</span>'}</td>`).join('')}
+          </tr>
+        `).join('');
+
+      } catch (e) {
+        errEl.innerText = 'Error ejecutando consulta: ' + e;
+      }
+    }
+  </script>
+</body>
+</html>
