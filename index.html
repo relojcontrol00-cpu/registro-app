@@ -298,17 +298,19 @@
           </div>
         </div>
 
-        <!-- Gráfico 4: Lectura acumulada Agua MG -->
+        <!-- Alertas de consumo -->
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div class="flex items-center justify-between mb-4">
             <div>
-              <h3 class="text-sm font-bold text-slate-900">Lectura Acumulada Agua General</h3>
-              <p class="text-xs text-slate-500">Evolución continua del contador (m³)</p>
+              <h3 class="text-sm font-bold text-slate-900">Alertas de consumo</h3>
+              <p class="text-xs text-slate-500">Más de 100% sobre la media del período</p>
             </div>
-            <span class="p-2 bg-blue-50 text-blue-600 rounded-lg"><i data-lucide="trending-up" class="w-4 h-4"></i></span>
+            <span class="p-2 bg-amber-50 text-amber-600 rounded-lg"><i data-lucide="bell-ring" class="w-4 h-4"></i></span>
           </div>
-          <div class="h-64">
-            <canvas id="chart-acumulado"></canvas>
+          <div class="h-64 overflow-y-auto">
+            <ul id="alertas-consumo-lista" class="space-y-2" aria-live="polite">
+              <li class="py-8 text-center text-xs text-slate-400">Cargando alertas...</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -572,6 +574,64 @@
       cargarGraficos();
     }
 
+    function renderizarAlertasConsumo(data) {
+      const lista = document.getElementById('alertas-consumo-lista');
+      const multiplicadorAlerta = 2;
+      const series = [
+        { campo: 'consumo_agua_mg', nombre: 'Agua general', unidad: 'm³' },
+        { campo: 'consumo_agua_hotel', nombre: 'Agua hotel', unidad: 'm³' },
+        { campo: 'consumo_agua_piscina', nombre: 'Agua piscina', unidad: 'm³' },
+        { campo: 'consumo_agua_bow_gym', nombre: 'Agua restaurante', unidad: 'm³' },
+        { campo: 'consumo_luz_hotel', nombre: 'Luz hotel', unidad: 'kWh' },
+        { campo: 'consumo_diesel', nombre: 'Diésel', unidad: 'L' }
+      ];
+      const alertas = [];
+      const esNumero = valor => valor !== null && valor !== undefined && Number.isFinite(Number(valor));
+
+      series.forEach(serie => {
+        const valores = data
+          .map(registro => registro[serie.campo])
+          .filter(esNumero)
+          .map(Number)
+          .filter(valor => valor >= 0);
+        if (valores.length === 0) return;
+
+        const media = valores.reduce((total, valor) => total + valor, 0) / valores.length;
+        if (media <= 0) return;
+
+        data.forEach(registro => {
+          const valor = registro[serie.campo];
+          if (!esNumero(valor) || Number(valor) < 0 || Number(valor) <= media * multiplicadorAlerta) return;
+          alertas.push({ ...serie, fecha: registro.fecha, valor: Number(valor), media });
+        });
+      });
+
+      alertas.sort((a, b) => b.fecha.localeCompare(a.fecha) || (b.valor / b.media) - (a.valor / a.media));
+      const fmt = valor => Number(valor).toLocaleString('es-CL', { maximumFractionDigits: 2 });
+      const visibles = alertas.slice(0, 8);
+
+      if (visibles.length === 0) {
+        lista.innerHTML = '<li class="py-8 text-center text-xs text-slate-400">Sin alertas para el período seleccionado.</li>';
+        return;
+      }
+
+      lista.innerHTML = visibles.map(alerta => `
+        <li class="flex items-center justify-between gap-3 rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2.5">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span class="text-xs font-semibold text-slate-800">${alerta.nombre}</span>
+              <span class="text-[10px] text-slate-500">${alerta.fecha.split('-').reverse().join('/')}</span>
+            </div>
+            <p class="mt-1 text-[10px] text-amber-800">${fmt((alerta.valor / alerta.media - 1) * 100)}% sobre la media</p>
+          </div>
+          <div class="shrink-0 text-right">
+            <div class="text-sm font-bold text-amber-800">${fmt(alerta.valor)} ${alerta.unidad}</div>
+            <div class="text-[10px] text-slate-500">Media: ${fmt(alerta.media)} ${alerta.unidad}</div>
+          </div>
+        </li>
+      `).join('');
+    }
+
     async function cargarGraficos() {
       try {
         const res = await fetch(`/api/graficos?periodo=${periodoGraficosActual}`);
@@ -585,12 +645,12 @@
         const consumoAguaRest = data.map(r => r.consumo_agua_bow_gym);
         const consumoLuz = data.map(r => r.consumo_luz_hotel);
         const promedioDiesel7d = data.map(r => r.consumo_diesel_promedio_7d);
-        const lecturaAguaMG = data.map(r => r.agua_mg);
 
         // Destruir gráficos previos
-        ['agua', 'luz', 'diesel', 'acumulado'].forEach(k => {
+        ['agua', 'luz', 'diesel'].forEach(k => {
           if (charts[k]) charts[k].destroy();
         });
+        renderizarAlertasConsumo(data);
 
         // 1. Gráfico Agua
         charts.agua = new Chart(document.getElementById('chart-agua'), {
@@ -641,16 +701,6 @@
             plugins: { legend: { display: false } },
             scales: { y: { beginAtZero: true } }
           }
-        });
-
-        // 4. Gráfico Acumulado
-        charts.acumulado = new Chart(document.getElementById('chart-acumulado'), {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [{ label: 'Lectura Total m³', data: lecturaAguaMG, borderColor: '#2563eb', tension: 0.1, pointRadius: 0 }]
-          },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
 
       } catch (e) {
