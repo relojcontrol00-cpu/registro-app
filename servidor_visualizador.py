@@ -210,6 +210,7 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 agua_piscina,
                 consumo_agua_piscina,
                 consumo_agua_hotel,
+                consumo_agua_bow_gym,
                 luz_hotel,
                 consumo_luz_hotel,
                 nivel_diesel,
