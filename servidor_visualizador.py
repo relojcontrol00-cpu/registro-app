@@ -187,20 +187,22 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         cur = con.cursor()
 
         periodo = params.get("periodo", ["90d"])[0]
-        
-        limit_clause = ""
-        if periodo == "30d":
-            limit_clause = "LIMIT 30"
-        elif periodo == "90d":
-            limit_clause = "LIMIT 90"
-        elif periodo == "1y":
-            limit_clause = "LIMIT 365"
-        elif periodo == "all":
-            limit_clause = ""
-        else:
-            limit_clause = "LIMIT 90"
+        limites_periodo = {"30d": 30, "90d": 90, "1y": 365, "all": None}
+        limite = limites_periodo.get(periodo, 90)
 
-        query = f"""
+        query = """
+            WITH graficos_suavizados AS (
+                SELECT
+                    v.*,
+                    AVG(v.consumo_diesel) OVER (
+                        ORDER BY julianday(v.fecha)
+                        RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
+                    ) AS promedio_diesel_7d,
+                    MIN(julianday(v.fecha)) OVER () AS primera_fecha,
+                    MAX(julianday(v.fecha)) OVER () AS ultima_fecha,
+                    ROW_NUMBER() OVER (ORDER BY v.fecha DESC) AS orden_periodo
+                FROM v_consumos_diarios v
+            )
             SELECT 
                 fecha,
                 agua_mg,
@@ -215,15 +217,18 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 consumo_luz_hotel,
                 nivel_diesel,
                 consumo_diesel,
+                CASE
+                    WHEN julianday(fecha) >= primera_fecha + 3
+                     AND julianday(fecha) <= ultima_fecha - 3
+                    THEN ROUND(promedio_diesel_7d, 2)
+                    ELSE NULL
+                END AS consumo_diesel_promedio_7d,
                 gas_registro
-            FROM (
-                SELECT * FROM v_consumos_diarios 
-                ORDER BY fecha DESC 
-                {limit_clause}
-            )
+            FROM graficos_suavizados
+            WHERE (? IS NULL OR orden_periodo <= ?)
             ORDER BY fecha ASC
         """
-        cur.execute(query)
+        cur.execute(query, (limite, limite))
         rows = [dict(r) for r in cur.fetchall()]
         con.close()
 

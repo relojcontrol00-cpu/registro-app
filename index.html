@@ -289,7 +289,7 @@
           <div class="flex items-center justify-between mb-4">
             <div>
               <h3 class="text-sm font-bold text-slate-900">Consumo Diario de Diésel</h3>
-              <p class="text-xs text-slate-500">Litros consumidos por día (L/día)</p>
+              <p class="text-xs text-slate-500">Promedio centrado: 3 días anteriores y 3 posteriores</p>
             </div>
             <span class="p-2 bg-rose-50 text-rose-600 rounded-lg"><i data-lucide="fuel" class="w-4 h-4"></i></span>
           </div>
@@ -585,6 +585,7 @@
         const consumoAguaRest = data.map(r => r.consumo_agua_bow_gym);
         const consumoLuz = data.map(r => r.consumo_luz_hotel);
         const consumoDiesel = data.map(r => r.consumo_diesel);
+        const promedioDiesel7d = data.map(r => r.consumo_diesel_promedio_7d);
         const lecturaAguaMG = data.map(r => r.agua_mg);
 
         // Destruir gráficos previos
@@ -617,19 +618,42 @@
           options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
 
-        // 3. Gráfico Diésel: solo consumo diario (recargas ya imputadas)
+        // 3. Gráfico Diésel: consumo diario y promedio móvil centrado de siete días
         charts.diesel = new Chart(document.getElementById('chart-diesel'), {
-          type: 'bar',
+          type: 'line',
           data: {
             labels,
             datasets: [
-              { label: 'Consumo (L/día)', data: consumoDiesel, backgroundColor: '#f43f5e', borderRadius: 2 }
+              {
+                type: 'bar',
+                label: 'Consumo diario (L/día)',
+                data: consumoDiesel,
+                backgroundColor: 'rgba(244,63,94,0.16)',
+                borderColor: 'rgba(244,63,94,0.4)',
+                borderWidth: 1,
+                borderRadius: 2,
+                order: 2
+              },
+              {
+                type: 'line',
+                label: 'Promedio centrado 7 días (L/día)',
+                data: promedioDiesel7d,
+                borderColor: '#be123c',
+                backgroundColor: 'rgba(244,63,94,0.08)',
+                fill: false,
+                tension: 0.2,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                borderWidth: 2.5,
+                spanGaps: false,
+                order: 1
+              }
             ]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } },
             scales: { y: { beginAtZero: true } }
           }
         });
