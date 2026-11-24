@@ -12,9 +12,11 @@ import os
 import webbrowser
 import sys
 
-PORT = 8050
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Registro_Medidores_Espacio_OX.sqlite")
+PORT = int(os.environ.get("PORT", "8050"))
+HOST = os.environ.get("HOST", "127.0.0.1")
+DB_FILE = os.environ.get("DB_FILE") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "Registro_Medidores_Espacio_OX.sqlite")
 HTML_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+OPEN_BROWSER = os.environ.get("OPEN_BROWSER", "1") != "0"
 
 
 def get_db():
@@ -101,15 +103,22 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         cur.execute("SELECT count(*) FROM observaciones_diarias")
         total_obs = cur.fetchone()[0]
 
-        # Promedios últimos 30 días
-        cur.execute("""
-            SELECT 
-                ROUND(AVG(consumo_agua_mg), 2) as avg_agua_mg,
-                ROUND(AVG(consumo_agua_bow), 2) as avg_agua_bow,
-                ROUND(AVG(consumo_luz_hotel), 2) as avg_luz_hotel
-            FROM (SELECT * FROM v_consumos_diarios ORDER BY fecha DESC LIMIT 30)
-        """)
-        avg_row = dict(cur.fetchone() or {})
+        # Promedios de los últimos 7 y 30 registros diarios
+        def promedios(limite):
+            cur.execute("""
+                SELECT
+                    ROUND(AVG(consumo_agua_mg), 2) as agua_mg,
+                    ROUND(AVG(consumo_agua_hotel), 2) as agua_hotel,
+                    ROUND(AVG(consumo_agua_piscina), 2) as agua_piscina,
+                    ROUND(AVG(consumo_agua_bow_gym), 2) as agua_rest,
+                    ROUND(AVG(consumo_luz_hotel), 2) as luz_hotel,
+                    ROUND(AVG(consumo_diesel), 2) as diesel
+                FROM (SELECT * FROM v_consumos_diarios ORDER BY fecha DESC LIMIT ?)
+            """, (limite,))
+            return dict(cur.fetchone() or {})
+
+        avg7 = promedios(7)
+        avg30 = promedios(30)
 
         con.close()
 
@@ -121,7 +130,8 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             "total_obs": total_obs,
             "ultimo_registro": last_row,
             "penultimo_registro": prev_row,
-            "promedios_30d": avg_row
+            "promedios_7d": avg7,
+            "promedios_30d": avg30
         })
 
     def serve_consumos(self, params):
@@ -203,7 +213,7 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 luz_hotel,
                 consumo_luz_hotel,
                 nivel_diesel,
-                delta_nivel_diesel,
+                consumo_diesel,
                 gas_registro
             FROM (
                 SELECT * FROM v_consumos_diarios 
@@ -316,7 +326,7 @@ def find_free_port(start_port=8050):
 
 if __name__ == "__main__":
     port = find_free_port(PORT)
-    server_address = ("127.0.0.1", port)
+    server_address = (HOST, port)
     
     # Manejar inicio limpio
     socketserver.TCPServer.allow_reuse_address = True
@@ -329,8 +339,11 @@ if __name__ == "__main__":
         print(f"  Presiona Ctrl+C para detener el servidor.")
         print(f"=========================================================\n")
         
-        # Abrir navegador automáticamente
-        webbrowser.open(url)
+        # Abrir navegador automáticamente (desactivado dentro del contenedor)
+        if OPEN_BROWSER:
+            webbrowser.open(url)
+        else:
+            print("  Navegador automático desactivado (OPEN_BROWSER=0).")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

@@ -1,0 +1,20 @@
+services:
+  medidores:
+    build: .
+    image: registro-medidores-espacio-ox:local
+    container_name: registro-medidores
+    ports:
+      # Accesible desde la red local (http://<IP-del-equipo>:8050).
+      # OJO: el dashboard no tiene autenticación; cualquiera en la LAN puede leer los datos.
+      # Para volver a solo localhost: "127.0.0.1:8050:8050".
+      - "8050:8050"
+    volumes:
+      # La DB de Windows es la fuente de verdad, montada SOLO LECTURA.
+      # Si crece o cambia en Windows, el contenedor lo ve al instante: sin rebuild.
+      - ./Registro_Medidores_Espacio_OX.sqlite:/app/data/Registro_Medidores_Espacio_OX.sqlite:ro
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8050
+      OPEN_BROWSER: "0"
+      DB_FILE: /app/data/Registro_Medidores_Espacio_OX.sqlite
+    restart: unless-stopped

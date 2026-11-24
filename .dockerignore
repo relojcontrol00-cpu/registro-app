@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.xlsx
+*_backup*.sqlite
+abrir_visualizador.bat
+migrar_excel_a_sqlite.py
+esquema_registro_medidores.sql
+AGENTS.md
+README-CONTENEDOR.md
+Dockerfile
+docker-compose.yml
+.dockerignore

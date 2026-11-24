@@ -72,40 +72,9 @@ def main():
 
     cur = con.cursor()
 
-    # 3. Insertar instalación
-    cur.execute(
-        "INSERT INTO instalaciones (id, codigo, nombre, activa) VALUES (1, 'OX', 'Espacio OX', 1)"
-    )
-
-    # 4. Insertar puntos de medición
-    puntos = [
-        (1, 1, 'AGUA-MG', 'Medidor agua general', 'medidor', 'agua', 'm3', 'inferida', 'acumulativa', None, 1, 'Unidad inferida por el tipo de contador.'),
-        (2, 1, 'AGUA-BOW', 'Remarcador agua Bow', 'remarcador', 'agua', 'm3', 'inferida', 'acumulativa', 1, 1, 'Remarcador asociado al medidor general de agua.'),
-        (3, 1, 'AGUA-PISCINA', 'Remarcador agua piscina', 'remarcador', 'agua', 'm3', 'inferida', 'acumulativa', 1, 1, 'Remarcador asociado al medidor general de agua.'),
-        (4, 1, 'LUZ-HOTEL', 'Remarcador luz hotel', 'remarcador', 'electricidad', 'kWh', 'inferida', 'acumulativa', None, 1, 'No hay un medidor padre registrado en la hoja.'),
-        (5, 1, 'DIESEL-TK', 'Nivel estanque petróleo', 'nivel', 'diesel', 'L', 'inferida', 'nivel', None, 1, 'Unidad inferida por los valores del estanque y referencias a recargas en litros.'),
-        (6, 1, 'GAS-REGISTRO', 'Registro de gas', 'registro_texto', 'gas', None, 'pendiente', 'texto', None, 1, 'Se preserva como texto: la columna mezcla porcentajes, PSI y otros formatos.')
-    ]
-    cur.executemany(
-        """INSERT INTO puntos_medicion 
-           (id, instalacion_id, codigo, nombre, tipo, magnitud, unidad, estado_unidad, modo_lectura, punto_padre_id, activo, notas)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        puntos
-    )
-
-    # 5. Insertar registro de importación
-    cur.execute(
-        """INSERT INTO importaciones (id, archivo, hoja, filas_origen, notas)
-           VALUES (1, ?, ?, ?, ?)""",
-        (
-            EXCEL_FILE,
-            SHEET_NAME,
-            2251,
-            "Importación oficial definitiva tras revisiones y ajustes del Excel. Filas 2 a 2252 (2020-09-23 a 2026-11-21). Filas futuras vacías omitidas."
-        )
-    )
-
-    # 6. Leer Excel y cargar lecturas
+    # 3. El esquema (esquema_registro_medidores.sql) ya semilla instalaciones y puntos_medicion
+    #    con INSERT OR IGNORE, así que aquí no se vuelven a insertar.
+    # 4. Leer Excel y cargar lecturas
     print(f"Cargando datos desde {EXCEL_FILE} [{SHEET_NAME}]...")
     wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
     ws = wb[SHEET_NAME]
@@ -126,7 +95,7 @@ def main():
     start_date = None
     end_date = None
 
-    for r in range(2, 2253):
+    for r in range(2, ws.max_row + 1):
         f_val = ws.cell(r, 1).value
         if f_val is None:
             continue
@@ -172,6 +141,18 @@ def main():
             ))
 
     wb.close()
+
+    # Insertar registro de importación con los valores reales leídos
+    cur.execute(
+        """INSERT INTO importaciones (id, archivo, hoja, filas_origen, notas)
+           VALUES (1, ?, ?, ?, ?)""",
+        (
+            EXCEL_FILE,
+            SHEET_NAME,
+            total_rows,
+            f"Importación oficial definitiva tras revisiones y ajustes del Excel. Filas leídas: {total_rows} (desde {start_date} a {end_date})."
+        )
+    )
 
     print(f"Insertando {len(lecturas_to_insert)} lecturas...")
     cur.executemany(
@@ -220,6 +201,23 @@ def main():
             ROUND(LAG(nivel_diesel) OVER (ORDER BY fecha) - nivel_diesel, 2) AS delta_nivel_diesel,
             gas_registro
         FROM lecturas_pivot
+    ),
+    diesel AS (
+        SELECT
+            *,
+            CASE
+                WHEN delta_nivel_diesel IS NULL THEN NULL
+                WHEN delta_nivel_diesel >= 0 THEN delta_nivel_diesel
+                ELSE COALESCE(
+                    ROUND(
+                        AVG(CASE WHEN delta_nivel_diesel >= 0 THEN delta_nivel_diesel END)
+                        OVER (ORDER BY fecha ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING),
+                        2
+                    ),
+                    0
+                )
+            END AS consumo_diesel
+        FROM diffs
     )
     SELECT 
         d.fecha,
@@ -235,9 +233,10 @@ def main():
         d.consumo_luz_hotel,
         d.nivel_diesel,
         d.delta_nivel_diesel,
+        d.consumo_diesel,
         d.gas_registro,
         obs.observacion
-    FROM diffs d
+    FROM diesel d
     LEFT JOIN observaciones_diarias obs ON d.fecha = obs.fecha
     ORDER BY d.fecha;
     """)

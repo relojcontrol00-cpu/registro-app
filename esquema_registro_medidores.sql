@@ -115,6 +115,23 @@ diffs AS (
         ROUND(LAG(nivel_diesel) OVER (ORDER BY fecha) - nivel_diesel, 2) AS delta_nivel_diesel,
         gas_registro
     FROM lecturas_pivot
+),
+diesel AS (
+    SELECT
+        *,
+        CASE
+            WHEN delta_nivel_diesel IS NULL THEN NULL
+            WHEN delta_nivel_diesel >= 0 THEN delta_nivel_diesel
+            ELSE COALESCE(
+                ROUND(
+                    AVG(CASE WHEN delta_nivel_diesel >= 0 THEN delta_nivel_diesel END)
+                    OVER (ORDER BY fecha ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING),
+                    2
+                ),
+                0
+            )
+        END AS consumo_diesel
+    FROM diffs
 )
 SELECT 
     d.fecha,
@@ -130,9 +147,10 @@ SELECT
     d.consumo_luz_hotel,
     d.nivel_diesel,
     d.delta_nivel_diesel,
+    d.consumo_diesel,
     d.gas_registro,
     obs.observacion
-FROM diffs d
+FROM diesel d
 LEFT JOIN observaciones_diarias obs ON d.fecha = obs.fecha
 ORDER BY d.fecha;
 
